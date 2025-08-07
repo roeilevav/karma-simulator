@@ -18,8 +18,11 @@ def register_user(user_id, username):
         "user_id": str(user_id),
         "username": username
     }
+    url = f"{API_URL}/register"
+    print(f"➡️ Registering {username} via {url}")
     try:
-        response = requests.post(f"{API_URL}/register", json=payload)
+        response = requests.post(url, json=payload)
+        print(f"⬅️ Response: {response.status_code} — {response.text}")
         if response.status_code == 200:
             print(f"✅ Registered {username} (ID {user_id})")
             return True

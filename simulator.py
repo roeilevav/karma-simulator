@@ -1,66 +1,74 @@
+# karma_simulator.py
+
 import os
 import random
+import string
 import time
+import threading
 import requests
 
 API_URL = os.getenv("KARMA_API_URL", "https://karma-api2-production.up.railway.app")
-SIMULATED_USERS = 20
+SIM_USER_COUNT = int(os.getenv("SIM_USER_COUNT", 20))
 TRIGGER_SPIKE = os.getenv("TRIGGER_SPIKE", "false").lower() == "true"
 
-# Create fake users in memory
-users = [f"sim_user_{i+1}" for i in range(SIMULATED_USERS)]
+users = []
 
-# Generate fake balances (1–42 Karma)
-balances = {user: random.randint(1, 42) for user in users}
-
-
-def send_karma(sender, recipient, amount):
-    payload = {
-        "from_user": sender,
-        "to_user": recipient,
-        "amount": amount
-    }
-    try:
-        r = requests.post(f"{API_URL}/send", json=payload)
-        if r.status_code == 200:
-            print(f"✅ {sender} sent {amount} Karma to {recipient}")
+def register_users():
+    global users
+    print(f"🌀 Karma Simulation Started with {SIM_USER_COUNT} users")
+    for i in range(SIM_USER_COUNT):
+        user_id = f"sim_user_{i+1}"
+        username = f"Sim User {i+1}"
+        response = requests.post(f"{API_URL}/register", json={
+            "user_id": user_id,
+            "username": username
+        })
+        if response.status_code == 200:
+            print(f"✅ Registered: {username}")
+            users.append(user_id)
         else:
-            print(f"❌ Failed to send Karma: {r.status_code} — {r.text}")
-    except Exception as e:
-        print(f"⚠️ Error sending Karma: {e}")
+            print(f"⚠️ Failed to register {username}: {response.text}")
 
+def send_random_transaction():
+    if len(users) < 2:
+        print("⛔ Not enough users to send Karma.")
+        return
 
-def simulate_transaction():
     sender = random.choice(users)
-    recipient = random.choice([u for u in users if u != sender])
-    max_send = balances[sender]
-    if max_send < 1:
-        return  # Skip if sender has no Karma
-    amount = random.randint(1, max_send)
+    receiver = random.choice([u for u in users if u != sender])
+    amount = round(random.uniform(1, 5), 2)
 
-    send_karma(sender, recipient, amount)
-    balances[sender] -= amount
-    balances[recipient] += amount
+    response = requests.post(f"{API_URL}/send", json={
+        "sender_id": sender,
+        "receiver_id": receiver,
+        "amount": amount
+    })
 
+    if response.status_code == 200:
+        print(f"📤 {sender} sent {amount} Karma to {receiver}")
+    else:
+        print(f"❌ Failed to send Karma: {response.status_code} — {response.text}")
 
-def simulate_spike():
-    print("\n🚀 Triggering Karma activity spike!")
-    for _ in range(random.randint(10, 20)):
-        simulate_transaction()
-
-
-def run_forever():
-    print(f"\n🌀 Karma Simulation Started with {SIMULATED_USERS} users")
+def run_normal_activity():
     while True:
-        # Decide whether to spike or do a normal transaction
-        if TRIGGER_SPIKE:
-            simulate_spike()
-        else:
-            simulate_transaction()
-
-        # Sleep a bit (simulate few tx/hr)
+        send_random_transaction()
         time.sleep(random.randint(60, 300))  # 1–5 minutes
 
+def run_spike():
+    print("🔥 Spike mode active: sending burst of transactions")
+    for _ in range(30):
+        send_random_transaction()
+        time.sleep(random.uniform(0.2, 1.0))  # rapid-fire
+    print("✅ Spike complete")
 
 if __name__ == "__main__":
-    run_forever()
+    register_users()
+
+    if TRIGGER_SPIKE:
+        run_spike()
+    else:
+        # Run in background thread so Railway doesn't kill it for inactivity
+        t = threading.Thread(target=run_normal_activity)
+        t.start()
+        while True:
+            time.sleep(3600)  # keep main thread alive

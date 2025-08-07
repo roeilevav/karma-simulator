@@ -13,21 +13,32 @@ TRIGGER_SPIKE = os.getenv("TRIGGER_SPIKE", "false").lower() == "true"
 
 users = []
 
+def register_user(user_id, username):
+    payload = {
+        "user_id": str(user_id),
+        "username": username
+    }
+    try:
+        response = requests.post(f"{API_URL}/register", json=payload)
+        if response.status_code == 200:
+            print(f"✅ Registered {username} (ID {user_id})")
+            return True
+        else:
+            print(f"⚠️ Failed to register {username}: {response.text}")
+            return False
+    except Exception as e:
+        print(f"❌ Exception during registration of {username}: {e}")
+        return False
+
+
 def register_users():
     global users
     print(f"🌀 Karma Simulation Started with {SIM_USER_COUNT} users")
     for i in range(SIM_USER_COUNT):
         user_id = f"sim_user_{i+1}"
         username = f"Sim User {i+1}"
-        response = requests.post(f"{API_URL}/register", json={
-            "user_id": user_id,
-            "username": username
-        })
-        if response.status_code == 200:
-            print(f"✅ Registered: {username}")
+        if register_user(user_id, username):
             users.append(user_id)
-        else:
-            print(f"⚠️ Failed to register {username}: {response.text}")
 
 def send_random_transaction():
     if len(users) < 2:
